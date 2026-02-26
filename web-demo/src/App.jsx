@@ -1,103 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import * as THREE from "three";
 import * as Tone from "tone";
 
 // ============================================================
-// FORMU KONFIGURCIJA
-// Kiekviena raide = SVG path + garso tipas + spalva
-// Norint pakeisti forma: pakeisk "path" lauka
-//
-// Kaip gauti SVG path:
-// 1. Nupiesk forma bet kurioje programoje (Illustrator, Figma, Inkscape)
-// 2. Eksportuok kaip SVG
-// 3. Atidaryk SVG faila teksto redaktoriuje
-// 4. Surask <path d="..."> ir kopijuok ta "d" reiksme
-// 5. Idek ja i "path" lauka zemiau
+// GARSO VARIKLIS (tas pats kaip 2D versijoje)
 // ============================================================
-
-const LETTERS = [
-  {
-    id: "K1",
-    letter: "K",
-    soundType: "kikiCluster",
-    label: "Kiki Cluster",
-    color: "#c43a3a",
-    glow: "rgba(196, 58, 58, 0.35)",
-    // Kampuota K — aštrios linijos
-    path: "M30 180 L30 20 L50 20 L50 90 L120 20 L148 20 L80 88 L155 180 L125 180 L62 100 L50 112 L50 180Z",
-  },
-  {
-    id: "L",
-    letter: "L",
-    soundType: "bassRumble",
-    label: "Bass Rumble",
-    color: "#5a3a7a",
-    glow: "rgba(90, 58, 122, 0.35)",
-    // Stabili L — sunkus pagrindas
-    path: "M35 20 L60 20 L60 155 L160 155 L160 180 L35 180Z",
-  },
-  {
-    id: "A",
-    letter: "A",
-    soundType: "modulationReverb",
-    label: "Modulation",
-    color: "#2a7a6a",
-    glow: "rgba(42, 122, 106, 0.35)",
-    // A su erdve viduje — khora
-    path: "M95 20 L170 180 L145 180 L128 140 L62 140 L45 180 L20 180Z M75 118 L115 118 L95 58Z",
-  },
-  {
-    id: "U",
-    letter: "U",
-    soundType: "lowHum",
-    label: "Low Hum",
-    color: "#2a4a8f",
-    glow: "rgba(42, 74, 143, 0.35)",
-    // Apvali U — bouba siluma
-    path: "M30 20 L55 20 L55 115 Q55 160 95 160 Q135 160 135 115 L135 20 L160 20 L160 120 Q160 185 95 185 Q30 185 30 120Z",
-  },
-  {
-    id: "S",
-    letter: "S",
-    soundType: "modulationReverb",
-    label: "Modulation",
-    color: "#2a7a6a",
-    glow: "rgba(42, 122, 106, 0.35)",
-    // Vingiuota S — tarp formu
-    path: "M140 55 Q140 20 95 20 Q50 20 50 55 Q50 85 95 92 Q145 100 145 135 Q145 180 95 180 Q45 180 45 140 L68 140 Q70 158 95 158 Q122 158 122 138 Q122 112 95 105 Q48 96 48 58 Q48 20 95 20 Q142 20 142 55Z",
-  },
-  {
-    id: "Y",
-    letter: "Y",
-    soundType: "glitchClicks",
-    label: "Glitch Clicks",
-    color: "#8a6a1a",
-    glow: "rgba(138, 106, 26, 0.35)",
-    // Y — susikerta ir fragmentuojasi
-    path: "M15 20 L42 20 L95 95 L148 20 L175 20 L108 115 L108 180 L82 180 L82 115Z",
-  },
-  {
-    id: "K2",
-    letter: "K",
-    soundType: "kikiCluster",
-    label: "Kiki Cluster",
-    color: "#c43a3a",
-    glow: "rgba(196, 58, 58, 0.35)",
-    path: "M30 180 L30 20 L50 20 L50 90 L120 20 L148 20 L80 88 L155 180 L125 180 L62 100 L50 112 L50 180Z",
-  },
-];
-
-// ============================================================
-// GARSO VARIKLIS
-// Kiekvienas garsas priima "intensity" (0-1) kuri valdo
-// parametrus — kaip piezo reiksme SuperCollider kode
-// ============================================================
-
 function createSound(type, intensity) {
   const p = Math.max(0.05, Math.min(1, intensity));
-
   switch(type) {
     case "lowHum": {
-      const freq = 40 + p * 40; // 40-80 Hz
+      const freq = 40 + p * 40;
       const rev = new Tone.Reverb({ decay: 3, wet: 0.3 }).toDestination();
       const filter = new Tone.Filter(freq * (2 + p * 4), "lowpass").connect(rev);
       const synth = new Tone.Synth({
@@ -113,7 +25,6 @@ function createSound(type, intensity) {
           const nf = 40 + newP * 40;
           synth.frequency.rampTo(Tone.Frequency(nf, "hz").toNote(), 0.1);
           filter.frequency.rampTo(nf * (2 + newP * 4), 0.1);
-          lfo.frequency.rampTo(0.2 + newP * 1.6, 0.1);
         },
         dispose: () => { synth.triggerRelease(); setTimeout(() => { try{synth.dispose();rev.dispose();filter.dispose();lfo.dispose();}catch(e){} }, 2500); }
       };
@@ -171,10 +82,9 @@ function createSound(type, intensity) {
         octaves: 1.5,
         volume: -20 + p * 8,
       }).connect(panner);
-
       let running = true;
       let loopCount = 0;
-      const rate = 4 + p * 21; // clicks per second
+      const rate = 4 + p * 21;
       const loop = new Tone.Loop((time) => {
         if (!running || loopCount > 60) { loop.stop(); return; }
         if (Math.random() > 0.25) {
@@ -185,7 +95,6 @@ function createSound(type, intensity) {
       }, 1 / rate);
       Tone.getTransport().start();
       loop.start(0);
-
       return {
         update: (newP) => {
           synth.frequency.value = 200 + newP * 400;
@@ -197,8 +106,8 @@ function createSound(type, intensity) {
     case "kikiCluster": {
       const dest = Tone.getDestination();
       const synths = [];
-      const baseFreq = 1800 + p * 2200;
       const panners = [];
+      const baseFreq = 1800 + p * 2200;
       for (let i = 0; i < 6; i++) {
         const pan = new Tone.Panner(Math.random() * 1.4 - 0.7).connect(dest);
         panners.push(pan);
@@ -231,221 +140,410 @@ function createSound(type, intensity) {
   }
 }
 
+// ============================================================
+// 3D FORMU KURIMAS
+// Kiekviena forma atspindi garso psychoacoustini charakteri
+// ============================================================
+function createKikiGeometry() {
+  // Sprogstanti zvaigzde — asmus kampai
+  const pts = [];
+  const spikes = 12;
+  for (let i = 0; i < spikes; i++) {
+    const a = (i / spikes) * Math.PI * 2;
+    const r = (i % 2 === 0) ? 1.2 : 0.4 + Math.random() * 0.3;
+    const y = (Math.random() - 0.5) * 0.8;
+    pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+  }
+  const geo = new THREE.BufferGeometry();
+  const vertices = [];
+  const center = new THREE.Vector3(0, 0, 0);
+  for (let i = 0; i < pts.length; i++) {
+    const next = pts[(i + 1) % pts.length];
+    vertices.push(center.x, center.y, center.z);
+    vertices.push(pts[i].x, pts[i].y, pts[i].z);
+    vertices.push(next.x, next.y, next.z);
+    // top cap
+    vertices.push(0, 0.5, 0);
+    vertices.push(pts[i].x, pts[i].y + 0.5, pts[i].z);
+    vertices.push(next.x, next.y + 0.5, next.z);
+    // sides
+    vertices.push(pts[i].x, pts[i].y, pts[i].z);
+    vertices.push(pts[i].x, pts[i].y + 0.5, pts[i].z);
+    vertices.push(next.x, next.y, next.z);
+    vertices.push(next.x, next.y, next.z);
+    vertices.push(pts[i].x, pts[i].y + 0.5, pts[i].z);
+    vertices.push(next.x, next.y + 0.5, next.z);
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createLowHumGeometry() {
+  // Lygus akmuo — deformuota sfera
+  const geo = new THREE.SphereGeometry(1, 32, 24);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const noise = 1 + Math.sin(x * 3) * 0.08 + Math.cos(y * 4 + z * 2) * 0.06;
+    pos.setXYZ(i, x * noise, y * 0.75 * noise, z * noise);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createBassRumbleGeometry() {
+  // Sunkus monolitas — deformuotas kubas
+  const geo = new THREE.BoxGeometry(1.4, 1.8, 1.4, 6, 8, 6);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const weight = (y + 0.9) / 1.8;
+    const bulge = 1 + (1 - weight) * 0.15;
+    const roughness = Math.sin(x * 8 + z * 6) * 0.03;
+    pos.setXYZ(i, x * bulge + roughness, y, z * bulge + roughness);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createModulationGeometry() {
+  // Mobius / toras — erdve tarp
+  const geo = new THREE.TorusGeometry(0.8, 0.35, 24, 48);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const angle = Math.atan2(z, x);
+    const twist = Math.sin(angle * 2) * 0.2;
+    pos.setXYZ(i, x, y + twist, z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createGlitchGeometry() {
+  // Beveik-taisyklingas ikosaedras su glitch deformacijomis
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    // Kas trecias vertex paslinktas — "sugedintas" rastas
+    if (i % 3 === 0) {
+      const shift = 0.15 + Math.random() * 0.1;
+      pos.setXYZ(i, x + shift, y - shift * 0.5, z + shift * 0.3);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// ============================================================
+// KONFIGURCIJA
+// ============================================================
+const OBJECTS = [
+  { id: "kiki1", label: "K — Kiki Cluster", soundType: "kikiCluster", color: 0xc43a3a, emissive: 0x3a0808, createGeo: createKikiGeometry, x: -4.5 },
+  { id: "bass", label: "L — Bass Rumble", soundType: "bassRumble", color: 0x6a4a8a, emissive: 0x150a1e, createGeo: createBassRumbleGeometry, x: -2.25 },
+  { id: "mod", label: "A — Modulation", soundType: "modulationReverb", color: 0x2a8a7a, emissive: 0x081e1a, createGeo: createModulationGeometry, x: 0 },
+  { id: "hum", label: "U — Low Hum", soundType: "lowHum", color: 0x3a5a9f, emissive: 0x080e1e, createGeo: createLowHumGeometry, x: 2.25 },
+  { id: "glitch", label: "Y — Glitch Clicks", soundType: "glitchClicks", color: 0x9a7a2a, emissive: 0x1e1808, createGeo: createGlitchGeometry, x: 4.5 },
+];
+
 export default function App() {
-  const [active, setActive] = useState(null);
-  const [intensity, setIntensity] = useState(0);
-  const [started, setStarted] = useState(false);
+  const containerRef = useRef(null);
+  const sceneRef = useRef({});
   const soundRef = useRef(null);
-  const shapeRefs = useRef({});
+  const [started, setStarted] = useState(false);
+  const [activeLabel, setActiveLabel] = useState(null);
+  const [intensity, setIntensity] = useState(0);
 
-  const getIntensity = useCallback((e, id) => {
-    const el = shapeRefs.current[id];
-    if (!el) return 0.5;
-    const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = (e.clientX - cx) / (rect.width / 2);
-    const dy = (e.clientY - cy) / (rect.height / 2);
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    return Math.max(0.05, Math.min(1, 1 - dist * 0.7));
-  }, []);
-
-  const handleEnter = useCallback(async (e, letterObj) => {
-    if (Tone.context.state !== "running") await Tone.start();
-    if (soundRef.current) {
-      try { soundRef.current.dispose(); } catch(ex) {}
-      soundRef.current = null;
-    }
-    const p = getIntensity(e, letterObj.id);
-    setActive(letterObj.id);
-    setIntensity(p);
-    soundRef.current = createSound(letterObj.soundType, p);
-  }, [getIntensity]);
-
-  const handleMove = useCallback((e, letterObj) => {
-    if (active !== letterObj.id) return;
-    const p = getIntensity(e, letterObj.id);
-    setIntensity(p);
-    if (soundRef.current && soundRef.current.update) {
-      soundRef.current.update(p);
-    }
-  }, [active, getIntensity]);
-
-  const handleLeave = useCallback(() => {
-    setActive(null);
-    setIntensity(0);
-    if (soundRef.current) {
-      try { soundRef.current.dispose(); } catch(ex) {}
-      soundRef.current = null;
-    }
-  }, []);
-
+  // Three.js setup
   useEffect(() => {
+    if (!started || !containerRef.current) return;
+    const container = containerRef.current;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x08080a);
+    scene.fog = new THREE.FogExp2(0x08080a, 0.06);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    camera.position.set(0, 2, 10);
+    camera.lookAt(0, 0, 0);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0x222233, 0.5);
+    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(5, 8, 5);
+    scene.add(dirLight);
+    const pointLight = new THREE.PointLight(0x4466aa, 0.4, 20);
+    pointLight.position.set(-3, 4, 2);
+    scene.add(pointLight);
+
+    // Ground plane
+    const groundGeo = new THREE.PlaneGeometry(30, 30);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.95 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -1.5;
+    scene.add(ground);
+
+    // Objects
+    const meshes = [];
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2(9999, 9999);
+
+    OBJECTS.forEach((obj) => {
+      const geo = obj.createGeo();
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1e,
+        emissive: 0x000000,
+        roughness: 0.7,
+        metalness: 0.2,
+        wireframe: false,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(obj.x, 0, 0);
+      mesh.userData = { ...obj, baseColor: 0x1a1a1e, targetColor: 0x1a1a1e, targetEmissive: 0x000000 };
+      scene.add(mesh);
+      meshes.push(mesh);
+    });
+
+    sceneRef.current = { scene, camera, renderer, meshes, raycaster, mouse, activeObj: null };
+
+    // Mouse tracking
+    let hoveredObj = null;
+
+    const onMouseMove = (e) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(meshes);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const obj = hit.object;
+        const dist = hit.distance;
+        const p = Math.max(0.05, Math.min(1, 1 - (dist - 5) / 8));
+
+        if (hoveredObj !== obj) {
+          // Senas objektas — reset
+          if (hoveredObj) {
+            hoveredObj.userData.targetColor = 0x1a1a1e;
+            hoveredObj.userData.targetEmissive = 0x000000;
+          }
+          hoveredObj = obj;
+          // Naujas garsas
+          if (soundRef.current) {
+            try { soundRef.current.dispose(); } catch(ex) {}
+          }
+          Tone.start().then(() => {
+            soundRef.current = createSound(obj.userData.soundType, p);
+          });
+        } else {
+          // Update garsas
+          if (soundRef.current && soundRef.current.update) {
+            soundRef.current.update(p);
+          }
+        }
+
+        obj.userData.targetColor = obj.userData.color;
+        obj.userData.targetEmissive = obj.userData.emissive;
+        obj.userData.intensity = p;
+        setActiveLabel(obj.userData.label);
+        setIntensity(p);
+
+      } else {
+        if (hoveredObj) {
+          hoveredObj.userData.targetColor = 0x1a1a1e;
+          hoveredObj.userData.targetEmissive = 0x000000;
+          hoveredObj = null;
+          if (soundRef.current) {
+            try { soundRef.current.dispose(); } catch(ex) {}
+            soundRef.current = null;
+          }
+          setActiveLabel(null);
+          setIntensity(0);
+        }
+      }
+    };
+
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+    // Animation loop
+    let frame = 0;
+    const clock = new THREE.Clock();
+
+    const animate = () => {
+      frame = requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      meshes.forEach((mesh) => {
+        // Letas sukimasis
+        mesh.rotation.y += 0.003;
+        mesh.rotation.x = Math.sin(t * 0.5 + mesh.position.x) * 0.1;
+
+        // Spalvos interpoliacija
+        const current = mesh.material.color;
+        const target = new THREE.Color(mesh.userData.targetColor);
+        current.lerp(target, 0.08);
+
+        const currentEm = mesh.material.emissive;
+        const targetEm = new THREE.Color(mesh.userData.targetEmissive);
+        currentEm.lerp(targetEm, 0.08);
+
+        // Active — pulsuoja
+        if (mesh.userData.targetColor !== 0x1a1a1e) {
+          const p = mesh.userData.intensity || 0.5;
+          const pulse = 1 + Math.sin(t * 3) * 0.03 * p;
+          mesh.scale.setScalar(pulse);
+          mesh.material.emissiveIntensity = 0.3 + p * 0.7;
+        } else {
+          mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.05);
+          mesh.material.emissiveIntensity = 0;
+        }
+      });
+
+      // Letas kameros judejimas
+      camera.position.x = Math.sin(t * 0.1) * 0.5;
+      camera.position.y = 2 + Math.sin(t * 0.15) * 0.3;
+      camera.lookAt(0, 0, 0);
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Resize
+    const onResize = () => {
+      const w2 = container.clientWidth;
+      const h2 = container.clientHeight;
+      camera.aspect = w2 / h2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w2, h2);
+    };
+    window.addEventListener('resize', onResize);
+
     return () => {
+      cancelAnimationFrame(frame);
+      renderer.domElement.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
       if (soundRef.current) {
         try { soundRef.current.dispose(); } catch(e) {}
       }
     };
-  }, []);
+  }, [started]);
 
   if (!started) {
     return (
       <div onClick={async () => { await Tone.start(); setStarted(true); }} style={{
-        minHeight: "100vh", background: "#08080a", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", cursor: "pointer",
-        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        width: "100vw", height: "100vh", background: "#08080a",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", fontFamily: "'Cormorant Garamond', Georgia, serif",
       }}>
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet" />
-        <div style={{ color: "#fff", fontSize: "36px", letterSpacing: "16px", fontWeight: 300 }}>
-          KLAUSYK
-        </div>
-        <div style={{ color: "#444", fontSize: "13px", letterSpacing: "4px", marginTop: "12px", fontWeight: 300 }}>
-          paspausk kad pradeti
-        </div>
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&display=swap" rel="stylesheet" />
+        <div style={{ color: "#fff", fontSize: "36px", letterSpacing: "16px", fontWeight: 300 }}>KLAUSYK</div>
+        <div style={{ color: "#444", fontSize: "13px", letterSpacing: "4px", marginTop: "12px" }}>paspausk kad pradeti</div>
         <div style={{ marginTop: "48px", animation: "breathe 3s ease-in-out infinite" }}>
-          <svg width="50" height="50" viewBox="0 0 50 50">
-            <circle cx="25" cy="25" r="18" fill="none" stroke="#333" strokeWidth="1" />
-            <circle cx="25" cy="25" r="5" fill="#333" />
-          </svg>
+          <svg width="50" height="50" viewBox="0 0 50 50"><circle cx="25" cy="25" r="18" fill="none" stroke="#333" strokeWidth="1"/><circle cx="25" cy="25" r="5" fill="#333"/></svg>
         </div>
-        <style>{`
-          @keyframes breathe {
-            0%, 100% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 0.9; transform: scale(1.15); }
-          }
-        `}</style>
+        <style>{`@keyframes breathe { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.15); } }`}</style>
       </div>
     );
   }
 
-  const activeLetter = LETTERS.find(l => l.id === active);
+  const activeObj = activeLabel ? OBJECTS.find(o => o.label === activeLabel) : null;
+  const activeHex = activeObj ? "#" + activeObj.color.toString(16).padStart(6, "0") : "#333";
 
   return (
-    <div style={{
-      minHeight: "100vh", background: "#08080a",
-      fontFamily: "'Cormorant Garamond', Georgia, serif",
-      display: "flex", flexDirection: "column", overflow: "hidden",
-    }}>
-      <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet" />
+    <div style={{ width: "100vw", height: "100vh", background: "#08080a", position: "relative", overflow: "hidden", fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&display=swap" rel="stylesheet" />
 
-      {/* header */}
-      <div style={{ textAlign: "center", padding: "24px 0 0" }}>
+      {/* 3D Canvas */}
+      <div ref={containerRef} style={{ width: "100%", height: "100%", cursor: "crosshair" }} />
+
+      {/* Header */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0,
+        textAlign: "center", padding: "20px", pointerEvents: "none",
+      }}>
         <div style={{ color: "#fff", fontSize: "16px", letterSpacing: "10px", fontWeight: 300, textTransform: "uppercase" }}>
           Laipciaus Klausykla
         </div>
-        <div style={{ color: "#333", fontSize: "11px", letterSpacing: "3px", marginTop: "6px", fontWeight: 300, fontStyle: "italic" }}>
-          judesk pele ant raides — atstumas nuo centro keicia garsa
+        <div style={{ color: "#333", fontSize: "11px", letterSpacing: "3px", marginTop: "4px", fontStyle: "italic" }}>
+          3D skulpturos — vesk pele ant formos
         </div>
       </div>
 
-      {/* letters */}
+      {/* Bottom HUD */}
       <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        gap: "6px", padding: "0 20px", maxWidth: "1100px", margin: "0 auto", width: "100%",
-      }}>
-        {LETTERS.map((item) => {
-          const isActive = active === item.id;
-          return (
-            <div
-              key={item.id}
-              ref={el => shapeRefs.current[item.id] = el}
-              onMouseEnter={(e) => handleEnter(e, item)}
-              onMouseMove={(e) => handleMove(e, item)}
-              onMouseLeave={handleLeave}
-              style={{
-                flex: 1, maxWidth: "140px", aspectRatio: "0.75",
-                position: "relative", cursor: "crosshair",
-                transition: "transform 0.3s ease",
-                transform: isActive ? "scale(1.06)" : "scale(1)",
-              }}
-            >
-              {/* glow background */}
-              <div style={{
-                position: "absolute", inset: "-30px", borderRadius: "50%",
-                background: isActive
-                  ? `radial-gradient(circle, ${item.glow.replace(/[\d.]+\)$/, (intensity * 0.5).toFixed(2) + ")")} 0%, transparent 70%)`
-                  : "none",
-                transition: "all 0.3s ease", pointerEvents: "none",
-              }} />
-
-              {/* SVG shape */}
-              <svg viewBox="0 0 190 200" width="100%" height="100%" style={{ position: "relative" }}>
-                {/* hover area - invisible wider stroke */}
-                <path d={item.path} fill="transparent" stroke="transparent" strokeWidth="20" />
-
-                {/* visible shape */}
-                <path
-                  d={item.path}
-                  fill={isActive ? item.color + Math.round(intensity * 25).toString(16).padStart(2, '0') : "transparent"}
-                  stroke={isActive ? item.color : "#1e1e22"}
-                  strokeWidth={isActive ? 1.5 + intensity : 1.5}
-                  style={{
-                    transition: "stroke 0.2s ease, fill 0.3s ease",
-                    filter: isActive ? `drop-shadow(0 0 ${intensity * 15}px ${item.glow})` : "none",
-                  }}
-                />
-              </svg>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* info bar */}
-      <div style={{
-        padding: "0 20px 20px", maxWidth: "1100px", margin: "0 auto", width: "100%",
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        padding: "16px 24px", pointerEvents: "none",
       }}>
         {/* intensity bar */}
-        <div style={{
-          height: "2px", background: "#111", borderRadius: "1px",
-          marginBottom: "12px", overflow: "hidden",
-        }}>
+        <div style={{ height: "2px", background: "#111", borderRadius: "1px", marginBottom: "10px", overflow: "hidden" }}>
           <div style={{
-            height: "100%", borderRadius: "1px",
-            width: activeLetter ? `${intensity * 100}%` : "0%",
-            background: activeLetter ? activeLetter.color : "#333",
-            transition: "width 0.1s ease, background 0.3s ease",
+            height: "100%", width: activeLabel ? `${intensity * 100}%` : "0%",
+            background: activeHex, transition: "width 0.1s ease, background 0.3s ease",
           }} />
         </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "30px" }}>
-          <div>
-            {activeLetter ? (
-              <span style={{ color: activeLetter.color, fontSize: "13px", letterSpacing: "4px", fontWeight: 600, textTransform: "uppercase" }}>
-                {activeLetter.letter} — {activeLetter.label}
-              </span>
-            ) : (
-              <span style={{ color: "#1e1e22", fontSize: "12px", letterSpacing: "3px" }}>. . .</span>
-            )}
-          </div>
-          <div>
-            {activeLetter && (
-              <span style={{ color: "#444", fontSize: "11px", letterSpacing: "2px", fontFamily: "monospace" }}>
-                piezo: {intensity.toFixed(2)}
-              </span>
-            )}
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{
+            color: activeLabel ? activeHex : "#1a1a1e",
+            fontSize: "14px", letterSpacing: "4px", fontWeight: 600, textTransform: "uppercase",
+            transition: "color 0.3s ease",
+          }}>
+            {activeLabel || ". . ."}
+          </span>
+          {activeLabel && (
+            <span style={{ color: "#444", fontSize: "11px", letterSpacing: "2px", fontFamily: "monospace" }}>
+              piezo: {intensity.toFixed(2)}
+            </span>
+          )}
         </div>
 
-        {/* letter labels */}
-        <div style={{ display: "flex", gap: "6px", marginTop: "12px" }}>
-          {LETTERS.map((item) => (
-            <div key={item.id} style={{ flex: 1, maxWidth: "140px", textAlign: "center" }}>
-              <div style={{
-                color: active === item.id ? item.color : "#1a1a1e",
+        {/* Legend */}
+        <div style={{ display: "flex", gap: "8px", marginTop: "12px", justifyContent: "center" }}>
+          {OBJECTS.map(obj => {
+            const hex = "#" + obj.color.toString(16).padStart(6, "0");
+            const isActive = activeLabel === obj.label;
+            return (
+              <div key={obj.id} style={{
                 fontSize: "9px", letterSpacing: "1.5px", textTransform: "uppercase",
-                transition: "color 0.3s ease",
+                color: isActive ? hex : "#1e1e22", transition: "color 0.3s",
+                textAlign: "center", flex: 1,
               }}>
-                {item.letter}
+                {obj.label.split(" — ")[0]}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <style>{`
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #08080a; }
-      `}</style>
+      <style>{`* { margin: 0; padding: 0; box-sizing: border-box; } body { background: #08080a; overflow: hidden; }`}</style>
     </div>
   );
 }
