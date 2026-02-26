@@ -6,3 +6,4 @@ export default defineConfig({
   // Pakeisk 'klausykla' i savo repo pavadinima jei skiriasi
   base: '/Klausykla/',
 })
+
