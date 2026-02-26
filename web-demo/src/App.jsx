@@ -273,11 +273,9 @@ export default function App() {
 
     // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x08080a);
-    scene.fog = new THREE.FogExp2(0x08080a, 0.06);
 
     // Camera
-    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
     camera.position.set(0, 2, 10);
     camera.lookAt(0, 0, 0);
 
@@ -286,21 +284,167 @@ export default function App() {
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.8;
     container.appendChild(renderer.domElement);
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0x222233, 0.5);
-    scene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(5, 8, 5);
-    scene.add(dirLight);
-    const pointLight = new THREE.PointLight(0x4466aa, 0.4, 20);
-    pointLight.position.set(-3, 4, 2);
-    scene.add(pointLight);
+    // ============================================================
+    // SKYBOX — procedurinis atmosferinis dangus
+    //
+    // VARIANTAS A: procedurinis (dabartinis) — tamsus gradientas + zvaigzdes
+    // VARIANTAS B: savo nuotraukos — zr. komentarus apačioje
+    //
+    // Jei nori naudoti savo HDRI arba nuotraukas:
+    //
+    //   import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader'
+    //   new RGBELoader().load('/skybox.hdr', (texture) => {
+    //     texture.mapping = THREE.EquirectangularReflectionMapping;
+    //     scene.background = texture;
+    //     scene.environment = texture;
+    //   });
+    //
+    // Arba 6 nuotraukos (cube map):
+    //
+    //   const loader = new THREE.CubeTextureLoader();
+    //   scene.background = loader.load([
+    //     'px.jpg', 'nx.jpg', 'py.jpg', 'ny.jpg', 'pz.jpg', 'nz.jpg'
+    //   ]);
+    //
+    // Nemokami HDRI: https://polyhaven.com/hdris
+    // ============================================================
 
-    // Ground plane
-    const groundGeo = new THREE.PlaneGeometry(30, 30);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.95 });
+    // Skybox sfera su shader gradientu
+    const skyGeo = new THREE.SphereGeometry(400, 64, 32);
+    const skyMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColorTop: { value: new THREE.Color(0x020208) },
+        uColorMid: { value: new THREE.Color(0x0a0a1a) },
+        uColorBottom: { value: new THREE.Color(0x0e0812) },
+        uActiveColor: { value: new THREE.Color(0x000000) },
+        uIntensity: { value: 0.0 },
+      },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+        void main() {
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uColorTop;
+        uniform vec3 uColorMid;
+        uniform vec3 uColorBottom;
+        uniform vec3 uActiveColor;
+        uniform float uIntensity;
+        varying vec3 vWorldPos;
+        varying vec3 vNormal;
+
+        // Paprastas triuksmo generatorius zvaigzdem
+        float hash(vec3 p) {
+          p = fract(p * vec3(443.897, 441.423, 437.195));
+          p += dot(p, p.yzx + 19.19);
+          return fract((p.x + p.y) * p.z);
+        }
+
+        void main() {
+          vec3 dir = normalize(vWorldPos);
+          float y = dir.y * 0.5 + 0.5; // 0 = apacia, 1 = virsus
+
+          // Triju spalvu gradientas
+          vec3 col;
+          if (y > 0.5) {
+            col = mix(uColorMid, uColorTop, (y - 0.5) * 2.0);
+          } else {
+            col = mix(uColorBottom, uColorMid, y * 2.0);
+          }
+
+          // Zvaigzdes — tik virsutine pusfereje
+          if (y > 0.35) {
+            float stars = hash(floor(dir * 300.0));
+            float twinkle = sin(uTime * 0.5 + stars * 100.0) * 0.5 + 0.5;
+            if (stars > 0.997) {
+              col += vec3(0.6, 0.65, 0.8) * twinkle * (y - 0.35) * 3.0;
+            } else if (stars > 0.994) {
+              col += vec3(0.3, 0.3, 0.4) * twinkle * 0.5 * (y - 0.35) * 3.0;
+            }
+          }
+
+          // Subtilus ukanos sluoksnis
+          float nebula = hash(floor(dir * 20.0)) * 0.015;
+          float nebulaWave = sin(dir.x * 3.0 + uTime * 0.05) * sin(dir.z * 2.0 + uTime * 0.03);
+          col += vec3(0.02, 0.01, 0.04) * (nebula + nebulaWave * 0.005);
+
+          // Aktyvaus objekto spalva svelni atspindi danguje
+          col += uActiveColor * uIntensity * 0.04 * (0.5 + nebulaWave * 0.3);
+
+          // Horizonto svytejimas
+          float horizonGlow = exp(-abs(y - 0.3) * 8.0) * 0.03;
+          col += vec3(0.1, 0.08, 0.15) * horizonGlow;
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(sky);
+
+    // Zvaigzdziu daleliu sluoksnis — artimesnes zvaigzdes
+    const starCount = 800;
+    const starPositions = new Float32Array(starCount * 3);
+    const starSizes = new Float32Array(starCount);
+    for (let i = 0; i < starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+      const r = 80 + Math.random() * 200;
+      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = Math.abs(r * Math.cos(phi)) * 0.6 + 10; // daugiau virsuje
+      starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      starSizes[i] = 0.5 + Math.random() * 2.0;
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('size', new THREE.Float32BufferAttribute(starSizes, 1));
+    const starMat = new THREE.PointsMaterial({
+      color: 0x8888bb,
+      size: 0.8,
+      transparent: true,
+      opacity: 0.4,
+      sizeAttenuation: true,
+      depthWrite: false,
+    });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    // Subtili ruka
+    scene.fog = new THREE.FogExp2(0x06060c, 0.012);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0x222244, 0.4);
+    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xccccff, 0.5);
+    dirLight.position.set(5, 12, 5);
+    scene.add(dirLight);
+    const pointLight = new THREE.PointLight(0x4466aa, 0.4, 25);
+    pointLight.position.set(-3, 6, 2);
+    scene.add(pointLight);
+    // Svelni sviesa is apacios — atspindys nuo "gruntu"
+    const rimLight = new THREE.PointLight(0x1a1028, 0.3, 15);
+    rimLight.position.set(0, -3, 0);
+    scene.add(rimLight);
+
+    // Ground plane — tamsus atspindintis pavirsius
+    const groundGeo = new THREE.PlaneGeometry(60, 60);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x06060a,
+      roughness: 0.85,
+      metalness: 0.1,
+    });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -1.5;
@@ -398,6 +542,15 @@ export default function App() {
       frame = requestAnimationFrame(animate);
       const t = clock.getElapsedTime();
 
+      // Skybox animacija
+      skyMat.uniforms.uTime.value = t;
+
+      // Zvaigzdes letas sukimasis
+      stars.rotation.y = t * 0.005;
+
+      let activeColor = new THREE.Color(0x000000);
+      let activeIntensity = 0;
+
       meshes.forEach((mesh) => {
         // Letas sukimasis
         mesh.rotation.y += 0.003;
@@ -418,11 +571,17 @@ export default function App() {
           const pulse = 1 + Math.sin(t * 3) * 0.03 * p;
           mesh.scale.setScalar(pulse);
           mesh.material.emissiveIntensity = 0.3 + p * 0.7;
+          activeColor = new THREE.Color(mesh.userData.color);
+          activeIntensity = p;
         } else {
           mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.05);
           mesh.material.emissiveIntensity = 0;
         }
       });
+
+      // Skybox reaguoja i aktyvu objekta — svelnus spalvos atspindys
+      skyMat.uniforms.uActiveColor.value.lerp(activeColor, 0.05);
+      skyMat.uniforms.uIntensity.value += (activeIntensity - skyMat.uniforms.uIntensity.value) * 0.05;
 
       // Letas kameros judejimas
       camera.position.x = Math.sin(t * 0.1) * 0.5;
@@ -448,6 +607,10 @@ export default function App() {
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
+      skyGeo.dispose();
+      skyMat.dispose();
+      starGeo.dispose();
+      starMat.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
