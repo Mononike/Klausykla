@@ -10,6 +10,7 @@ The title "Staircase Listening Room" is a *metaphor for a metaphor* — there ar
 
 ## Live Demo
 
+
 → **[Web Demo](https://YOUR-USERNAME.github.io/klausykla/)** *(update after deploying)*
 
 Interactive browser prototype using Tone.js. Mouse position on each letter modulates sound parameters, simulating piezo sensor input.
