@@ -16,6 +16,7 @@ Interactive browser prototype using Tone.js. Mouse position on each letter modul
 
 ## Repository Structure
 
+
 ```
 klausykla/
 ├── supercollider/
