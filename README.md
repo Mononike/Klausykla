@@ -1,5 +1,6 @@
 # Laipčiaus Klausykla
 
+
 **Haptinė garso instaliacija — magistro tezė**
 
 *Laipčiaus Klausykla* tiria klausymąsi kaip kūnišką veiksmą. Lietuviškas žodis **KLAUSYK** paverčiamas taktilių 3D raidžių skulptūromis, kur kiekviena raidė tampa haptine-akustine architektūra, aktyvuojama prisilietimu.
